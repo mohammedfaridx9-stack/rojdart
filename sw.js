@@ -1,6 +1,6 @@
 /* ROJ DART Dashboard — Service Worker
-   تم التصميم والبرمجة بواسطة المهندس / محمد فريد غنيم
-   Developed & Engineered by Mohamed Farid Ghonim */
+   تم التصميم والبرمجة بواسطة المهندس / محمد غنيم
+   Developed & Engineered by Mohamed Ghonim */
 const CACHE = 'rojdart-v2';
 const CORE = ['./', './index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
