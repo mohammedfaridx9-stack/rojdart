@@ -4,8 +4,8 @@
 <!--
   ============================================================================
   ROJ DART Smart Industrial Dashboard  |  لوحة التحكم الصناعية الذكية
-  تم التصميم والبرمجة بواسطة المهندس / محمد فريد غنيم
-  Developed & Engineered by Mohamed Farid Ghonim
+  تم التصميم والبرمجة بواسطة المهندس / محمد غنيم
+  Developed & Engineered by Mohamed Ghonim
   ----------------------------------------------------------------------------
   Target: ROJ DART (90W) yarn feeder + STIRO G2D / Stela G2D machines
   MCU   : ESP32 DevKit V1 (isolated via PC817, powered by L7805 + 10uF/0.1uF)
@@ -40,7 +40,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
-/* Designed & Programmed by Eng. Mohamed Farid Ghonim */
+/* Designed & Programmed by Eng. Mohamed Ghonim */
 :root{--bg:#0b1220;--card:rgba(255,255,255,.06);--bd:rgba(255,255,255,.12);--tx:#e8eefc;--mut:#8fa0c2;
 --ok:#22d3a0;--warn:#fbbf24;--bad:#fb5a6b;--acc:#38bdf8;--acc2:#a78bfa}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -105,7 +105,7 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px 10px 6px
 <body>
 <header>
   <button class="ibtn" id="menuBtn" aria-label="menu">☰</button>
-  <div class="ttl"><b>ROJ DART · لوحة المراقبة الذكية</b><small>تم التصميم والبرمجة بواسطة المهندس / محمد فريد غنيم</small></div>
+  <div class="ttl"><b>ROJ DART · لوحة المراقبة الذكية</b><small>تم التصميم والبرمجة بواسطة المهندس / محمد غنيم</small></div>
   <button class="pill" id="connPill"><span class="dot" id="connDot"></span><span id="connTxt">غير متصل</span></button>
 </header>
 
@@ -115,7 +115,7 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px 10px 6px
   <a data-go="home">🏠 الرئيسية</a><a data-go="yarn">🧵 حساس قطع الخيط</a><a data-go="speed">⚡ حساس السرعة</a>
   <a data-go="dht">🌡️ الحرارة والرطوبة</a><a data-go="power">🔌 الطاقة والعزل</a>
   <a id="navConn">📡 الاتصال بالمتحكم</a><a id="navPdf">📄 تصدير تقرير PDF</a><a id="navInstall" style="display:none">📲 تثبيت التطبيق</a>
-  <div class="sig">تم التصميم والبرمجة بواسطة<br><b>المهندس / محمد فريد غنيم</b><br>Developed &amp; Engineered by<br><b>Mohamed Farid Ghonim</b></div>
+  <div class="sig">تم التصميم والبرمجة بواسطة<br><b>المهندس / محمد غنيم</b><br>Developed &amp; Engineered by<br><b>Mohamed Farid Ghonim</b></div>
 </nav></div>
 
 <main>
@@ -185,7 +185,7 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px 10px 6px
   <div class="card" style="margin-top:12px"><h3>📈 استقرار الجهد</h3><div class="chartbox"><canvas id="cVolt"></canvas></div></div>
 </section>
 
-<footer>© ROJ DART Smart Dashboard — تم التصميم والبرمجة بواسطة المهندس / <b>محمد فريد غنيم</b><br>Developed &amp; Engineered by <b>Mohamed Farid Ghonim</b></footer>
+<footer>© ROJ DART Smart Dashboard — تم التصميم والبرمجة بواسطة المهندس / <b>محمد غنيم</b><br>Developed &amp; Engineered by <b>Mohamed Farid Ghonim</b></footer>
 </main>
 
 <div class="tabbar">
@@ -206,8 +206,8 @@ footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px 10px 6px
 <script>
 /* ============================================================================
    ROJ DART Smart Dashboard — Application Logic
-   تم التصميم والبرمجة بواسطة المهندس / محمد فريد غنيم
-   Developed & Engineered by Mohamed Farid Ghonim
+   تم التصميم والبرمجة بواسطة المهندس / محمد غنيم
+   Developed & Engineered by Mohamed Ghonim
    ============================================================================ */
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const ROLLER_D = 0.04;            // pull roller diameter (m)
@@ -345,7 +345,7 @@ function exportPDF(){
   <h3>سجل القراءات</h3><table><tr><th>الوقت</th><th>RPM</th><th>°C</th><th>رطوبة%</th><th>V</th><th>الخيط</th></tr>${rows}</table>
   <h3>سجل التنبيهات</h3><table><tr><th>الوقت</th><th>التنبيه</th></tr>${al}</table>
   <h3>سجل قطع الخيط</h3><table><tr><th>#</th><th>الوقت</th><th>RPM</th></tr>${S.yarnLog.map(l=>`<tr><td>${l.n}</td><td>${l.t}</td><td>${l.rpm}</td></tr>`).join('')||'<tr><td colspan=3>—</td></tr>'}</table>
-  <hr><p style="text-align:center;margin-top:18px"><b>تم التصميم والبرمجة بواسطة المهندس / محمد فريد غنيم</b><br>Developed &amp; Engineered by Mohamed Farid Ghonim</p>`;
+  <hr><p style="text-align:center;margin-top:18px"><b>تم التصميم والبرمجة بواسطة المهندس / محمد غنيم</b><br>Developed &amp; Engineered by Mohamed Farid Ghonim</p>`;
   toast('جاري إنشاء PDF...');
   html2pdf().set({margin:8,filename:'ROJ-DART-Report-'+Date.now()+'.pdf',image:{type:'jpeg',quality:.95},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'}}).from($('#report')).save().then(()=>toast('تم حفظ التقرير'));
 }
