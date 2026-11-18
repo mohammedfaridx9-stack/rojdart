@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-theme="dark">
 <head>
 <!--
   ============================================================================
-  ROJ DART Smart Industrial Dashboard  |  لوحة التحكم الصناعية الذكية
+  كريتڤ · Ghønim  —  Smart Industrial Dashboard  |  لوحة التحكم الصناعية الذكية
   تم التصميم والبرمجة بواسطة المهندس / محمد غنيم
   Developed & Engineered by Mohamed Ghonim
   ----------------------------------------------------------------------------
@@ -12,12 +12,16 @@
 
   PROTOCOL (JSON, one object per message, ESP32 -> App), all keys optional:
     {"power":1,"yarn":1,"yarnCount":0,"rpm":1200,"temp":31.5,"hum":48,
-     "fan":0,"fanMode":"auto","vin":11.8,"vout":5.02,"opto":1}
-      yarn: 1 = intact, 0 = broken     opto: 1 = isolation healthy
+     "fan":0,"fanMode":"auto","fanOk":1,"vin":11.8,"vout":5.02,"opto":1}
+      yarn: 1 = intact, 0 = broken   opto: 1 = isolation healthy   temp: always Celsius
   App -> ESP32:
     {"cmd":"power","value":1}
     {"cmd":"lcd","line1":"Hello","line2":"World"}
-    {"cmd":"fan","mode":"auto|manual","value":0|1,"threshold":35}
+    {"cmd":"fan","mode":"auto|manual","value":0|1,"threshold":35,"hyst":2}
+    {"cmd":"buzzer","value":1|0}                       (Active Buzzer ON/OFF)
+    {"cmd":"alerts","buzzer":1,"rpmEn":1,"rpmMin":800,"rpmMax":1800,
+     "tempEn":1,"tempMin":10,"tempMax":45,"humEn":1,"humMin":20,"humMax":80,
+     "yarnEn":1,"fanEn":1,"powerEn":1}                 (sent on connect + on every change)
   Transports:
     Wi-Fi WebSocket : ws://<ESP32_IP>:81/
     Wi-Fi HTTP      : GET http://<ESP32_IP>/status (JSON), POST /cmd (JSON)
@@ -28,338 +32,190 @@
 -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b1220">
+<meta name="theme-color" content="#0b1220" id="metaTheme">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="author" content="Mohamed Farid Ghonim">
-<title>ROJ DART Dashboard</title>
+<meta name="apple-mobile-web-app-title" content="كريتڤ">
+<meta name="author" content="Mohamed Ghonim">
+<title>كريتڤ · Ghønim</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 /* Designed & Programmed by Eng. Mohamed Ghonim */
-:root{--bg:#0b1220;--card:rgba(255,255,255,.06);--bd:rgba(255,255,255,.12);--tx:#e8eefc;--mut:#8fa0c2;
---ok:#22d3a0;--warn:#fbbf24;--bad:#fb5a6b;--acc:#38bdf8;--acc2:#a78bfa}
+:root{--acc:#38bdf8;--acc2:#a78bfa;--on:#04101f;--r:18px;--pad:14px;--gap:12px;--blur:10px;
+--bg:#0b1220;--bg1:#1b2a4d;--bg2:#2a1b4d;--card:rgba(255,255,255,.06);--bd:rgba(255,255,255,.12);--tx:#e8eefc;--mut:#8fa0c2;
+--panel:#0e1730;--hdr:rgba(11,18,32,.78);--inp:rgba(0,0,0,.3);--track:#1b2542;--shadow:rgba(0,0,0,.25);
+--ok:#22d3a0;--warn:#fbbf24;--bad:#fb5a6b}
+[data-theme=light]{--bg:#eef2fa;--bg1:#d6e4ff;--bg2:#eddcff;--card:rgba(255,255,255,.78);--bd:rgba(20,30,60,.13);--tx:#111a33;--mut:#5a6784;
+--panel:#ffffff;--hdr:rgba(255,255,255,.82);--inp:rgba(20,30,60,.06);--track:#dbe2f1;--shadow:rgba(40,60,110,.14);--ok:#0b8f6a;--warn:#a96b00;--bad:#d6334a}
+[data-theme=amoled]{--bg:#000;--bg1:#000;--bg2:#000;--card:rgba(255,255,255,.05);--bd:rgba(255,255,255,.15);--panel:#070707;--hdr:rgba(0,0,0,.85);--track:#161616;--inp:rgba(255,255,255,.07)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'Cairo',system-ui,sans-serif;background:radial-gradient(1200px 600px at 80% -10%,#1b2a4d 0,transparent 60%),radial-gradient(900px 500px at -10% 110%,#2a1b4d 0,transparent 55%),var(--bg);color:var(--tx);min-height:100vh;padding-bottom:84px}
-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));background:rgba(11,18,32,.75);backdrop-filter:blur(14px);border-bottom:1px solid var(--bd)}
-.ibtn{background:var(--card);border:1px solid var(--bd);color:var(--tx);border-radius:12px;width:40px;height:40px;font-size:18px;cursor:pointer}
-.ttl{flex:1;line-height:1.2}.ttl b{font-size:16px;display:block}.ttl small{color:var(--acc);font-size:10.5px}
-.pill{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;border:1px solid var(--bd);background:var(--card);font-size:12px;cursor:pointer;color:var(--tx)}
+html{font-size:16px}
+body{font-family:'Cairo',system-ui,sans-serif;background:radial-gradient(1200px 600px at 80% -10%,var(--bg1) 0,transparent 60%),radial-gradient(900px 500px at -10% 110%,var(--bg2) 0,transparent 55%),var(--bg);background-attachment:fixed;color:var(--tx);min-height:100vh;padding-bottom:88px;transition:background .3s,color .3s}
+body.notab{padding-bottom:24px}
+body.solid{--blur:0px}body.solid .card{background:var(--panel)}
+body.compact{--pad:10px;--gap:8px}body.compact main{padding:10px}
+body.noanim *{animation:none!important;transition:none!important}
+.sub{display:block;font-size:.78em;font-weight:400;opacity:.72;line-height:1.35}
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top));background:var(--hdr);backdrop-filter:blur(14px);border-bottom:1px solid var(--bd)}
+.ibtn{background:var(--card);border:1px solid var(--bd);color:var(--tx);border-radius:12px;width:40px;height:40px;font-size:1.1rem;cursor:pointer;flex:none}
+.ttl{flex:1;min-width:0;line-height:1.25}.brandrow{display:flex;align-items:center;gap:7px}
+.brandrow b{font-size:1.15rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:99px;background:linear-gradient(135deg,var(--acc),var(--acc2));color:var(--on);letter-spacing:.3px;white-space:nowrap}
+.ttl small{color:var(--acc);font-size:.62rem;display:block}
+.pill{display:flex;align-items:center;gap:6px;padding:7px 11px;border-radius:99px;border:1px solid var(--bd);background:var(--card);font-size:.72rem;cursor:pointer;color:var(--tx);flex:none;font-family:inherit}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 8px currentColor;color:var(--bad)}
 .dot.on{background:var(--ok);color:var(--ok)}.dot.demo{background:var(--warn);color:var(--warn)}
 main{max-width:980px;margin:auto;padding:14px}
 .view{display:none;animation:fade .3s}.view.show{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:14px;backdrop-filter:blur(10px);box-shadow:0 8px 30px rgba(0,0,0,.25)}
-.card h3{font-size:14px;color:var(--mut);display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600}
-.tap{cursor:pointer;transition:.2s}.tap:active{transform:scale(.98)}.tap:hover{border-color:var(--acc)}
-.big{font-size:34px;font-weight:800}.unit{font-size:14px;color:var(--mut);margin-inline-start:4px}
+.grid{display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:var(--pad);backdrop-filter:blur(var(--blur));box-shadow:0 8px 30px var(--shadow);transition:border-color .2s,transform .2s,background .3s}
+.card[hidden]{display:none}
+.card h3{font-size:.88rem;color:var(--mut);display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600}
+.tap{cursor:pointer}.tap:active{transform:scale(.98)}.tap:hover{border-color:var(--acc)}
+.big{font-size:2.1rem;font-weight:800;line-height:1.2}.unit{font-size:.88rem;color:var(--mut);margin-inline-start:4px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.badge{padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600}
-.b-ok{background:rgba(34,211,160,.15);color:var(--ok)}.b-bad{background:rgba(251,90,107,.18);color:var(--bad)}.b-warn{background:rgba(251,191,36,.15);color:var(--warn)}
-.btn{background:linear-gradient(135deg,var(--acc),var(--acc2));border:0;color:#04101f;font-weight:800;font-family:inherit;padding:10px 16px;border-radius:12px;cursor:pointer;font-size:14px}
+.badge{padding:3px 10px;border-radius:99px;font-size:.75rem;font-weight:600;display:inline-block}
+.b-ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}.b-bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}.b-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.btn{background:linear-gradient(135deg,var(--acc),var(--acc2));border:0;color:var(--on);font-weight:800;font-family:inherit;padding:10px 16px;border-radius:calc(var(--r) * .7);cursor:pointer;font-size:.88rem;transition:transform .15s,opacity .2s}
+.btn:active{transform:scale(.97)}
 .btn.ghost{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
 .btn.red{background:linear-gradient(135deg,#fb5a6b,#f97316);color:#fff}
-.switch{position:relative;width:86px;height:44px;border-radius:99px;background:#2a3350;border:1px solid var(--bd);cursor:pointer;transition:.3s}
-.switch::after{content:'';position:absolute;top:4px;inset-inline-start:4px;width:34px;height:34px;border-radius:50%;background:#fff;transition:.3s}
-.switch.on{background:linear-gradient(135deg,#10b981,#22d3a0);box-shadow:0 0 18px rgba(34,211,160,.5)}
+.switch{position:relative;width:86px;height:44px;border-radius:99px;background:var(--track);border:1px solid var(--bd);cursor:pointer;transition:.3s;flex:none}
+.switch::after{content:'';position:absolute;top:4px;inset-inline-start:4px;width:34px;height:34px;border-radius:50%;background:#fff;transition:.3s;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.switch.on{background:linear-gradient(135deg,#10b981,var(--ok));box-shadow:0 0 18px color-mix(in srgb,var(--ok) 50%,transparent)}
 .switch.on::after{inset-inline-start:46px}
+.switch.sm{width:54px;height:30px}.switch.sm::after{width:22px;height:22px;top:3px;inset-inline-start:3px}.switch.sm.on::after{inset-inline-start:27px}
 .master{display:flex;align-items:center;justify-content:space-between}
-input[type=text],input[type=number]{width:100%;background:rgba(0,0,0,.3);border:1px solid var(--bd);color:var(--tx);border-radius:10px;padding:10px;font-family:inherit;font-size:15px;margin:6px 0}
+input[type=text],input[type=number]{width:100%;background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:10px;padding:10px;font-family:inherit;font-size:.95rem;margin:6px 0}
+input.num{width:92px;margin:0;text-align:center}input.txt{width:150px;margin:0}
+input[type=range]{accent-color:var(--acc);width:130px}
 .lcd{background:#1f3a1b;border:4px solid #0d1a0c;border-radius:10px;padding:12px;font-family:'Courier New',monospace;direction:ltr;color:#b6ff7a;text-shadow:0 0 6px #7dff3a;font-size:clamp(14px,4.4vw,22px);letter-spacing:2px;margin:8px 0;box-shadow:inset 0 0 20px rgba(0,0,0,.6)}
 .lcd div{white-space:pre;height:1.4em}
-.fan{width:46px;height:46px;border-radius:50%;border:3px solid var(--acc);border-top-color:transparent;border-bottom-color:transparent}
+.fan{width:46px;height:46px;border-radius:50%;border:3px solid var(--acc);border-top-color:transparent;border-bottom-color:transparent;flex:none}
 .fan.spin{animation:sp .5s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
-.seg{display:inline-flex;border:1px solid var(--bd);border-radius:12px;overflow:hidden}
-.seg button{background:transparent;border:0;color:var(--mut);padding:8px 14px;font-family:inherit;cursor:pointer}
-.seg button.a{background:var(--acc);color:#04101f;font-weight:700}
-.back{margin-bottom:12px}
+.seg{display:inline-flex;border:1px solid var(--bd);border-radius:12px;overflow:hidden;flex-wrap:wrap}
+.seg button{background:transparent;border:0;color:var(--mut);padding:7px 12px;font-family:inherit;cursor:pointer;font-size:.82rem;transition:background .2s}
+.seg button.a{background:var(--acc);color:var(--on);font-weight:700}
+.back{margin-bottom:12px}.back::before{content:'→ '}[dir=ltr] .back::before{content:'← '}
 canvas{max-width:100%}
 .chartbox{height:220px;position:relative}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:start}th{color:var(--mut);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:.82rem}th,td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:start}th{color:var(--mut);font-weight:600}
 .scroll{max-height:240px;overflow:auto}
-.alert{background:rgba(251,90,107,.15);border:1px solid var(--bad);color:#ffd5da;border-radius:14px;padding:12px;margin-bottom:12px;display:none;animation:pulse 1s infinite}
-@keyframes pulse{50%{box-shadow:0 0 22px rgba(251,90,107,.6)}}
-.drawer{position:fixed;inset:0;z-index:50;display:none}.drawer.open{display:block}
-.drawer .bg{position:absolute;inset:0;background:rgba(0,0,0,.55)}
-.drawer nav{position:absolute;top:0;bottom:0;inset-inline-start:0;width:290px;max-width:84%;background:#0e1730;border-inline-end:1px solid var(--bd);padding:18px;display:flex;flex-direction:column;gap:6px}
-.drawer nav a{padding:12px;border-radius:12px;cursor:pointer;color:var(--tx)}.drawer nav a:hover{background:var(--card)}
-.sig{margin-top:auto;font-size:11.5px;color:var(--mut);border-top:1px solid var(--bd);padding-top:12px;line-height:1.7}
-.sig b{color:var(--acc)}
-footer{text-align:center;color:var(--mut);font-size:11.5px;padding:18px 10px 6px}footer b{color:var(--acc)}
+.drawer{position:fixed;inset:0;z-index:50;visibility:hidden}.drawer.open{visibility:visible}
+.drawer .bg{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;transition:opacity .25s}.drawer.open .bg{opacity:1}
+.drawer nav{position:absolute;top:0;bottom:0;inset-inline-start:0;width:290px;max-width:84%;background:var(--panel);border-inline-end:1px solid var(--bd);padding:18px;display:flex;flex-direction:column;gap:4px;overflow:auto;transform:translateX(100%);transition:transform .28s}
+[dir=ltr] .drawer nav{transform:translateX(-100%)}
+.drawer.open nav{transform:none}
+.drawer nav h2{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:1.2rem}
+.drawer nav a{display:flex;align-items:center;gap:10px;padding:11px;border-radius:12px;cursor:pointer;color:var(--tx);font-size:.92rem}.drawer nav a:hover{background:var(--card)}
+.drawer nav a i{font-style:normal;width:1.4em;text-align:center}
+.sig{margin-top:auto;font-size:.72rem;color:var(--mut);border-top:1px solid var(--bd);padding-top:12px;line-height:1.7}.sig b{color:var(--acc)}
+footer{text-align:center;color:var(--mut);font-size:.72rem;padding:18px 10px 6px;line-height:1.8}footer b{color:var(--acc)}
 .modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:14px}
-.modal.open{display:flex}.modal .card{width:100%;max-width:420px;background:#0e1730}
+.modal.open{display:flex}.modal .card{width:100%;max-width:420px;background:var(--panel)}
 .modal .btn{width:100%;margin-top:8px}
-.toast{position:fixed;bottom:90px;inset-inline:14px;margin:auto;max-width:420px;background:#111b36;border:1px solid var(--bd);padding:12px;border-radius:12px;z-index:70;display:none;text-align:center}
-.tabbar{position:fixed;bottom:0;inset-inline:0;z-index:20;display:flex;justify-content:space-around;background:rgba(11,18,32,.9);backdrop-filter:blur(14px);border-top:1px solid var(--bd);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
-.tabbar a{flex:1;text-align:center;font-size:10.5px;color:var(--mut);padding:4px;cursor:pointer}.tabbar a span{display:block;font-size:19px}.tabbar a.a{color:var(--acc)}
-#report{position:fixed;left:-10000px;top:0;width:760px;background:#fff;color:#111;padding:24px;direction:rtl;font-family:'Cairo',Arial,sans-serif}
+.toast{position:fixed;bottom:92px;inset-inline:14px;margin:auto;max-width:420px;background:var(--panel);border:1px solid var(--bd);padding:12px;border-radius:12px;z-index:70;display:none;text-align:center;font-size:.88rem;box-shadow:0 8px 30px var(--shadow)}
+.tabbar{position:fixed;bottom:0;inset-inline:0;z-index:20;display:flex;justify-content:space-around;background:var(--hdr);backdrop-filter:blur(14px);border-top:1px solid var(--bd);padding:6px 2px calc(6px + env(safe-area-inset-bottom))}
+body.notab .tabbar{display:none}
+.tabbar a{flex:1;text-align:center;font-size:.62rem;color:var(--mut);padding:4px 1px;cursor:pointer;position:relative;line-height:1.25}.tabbar a i{display:block;font-style:normal;font-size:1.2rem}.tabbar a.a{color:var(--acc)}
+.tdot{position:absolute;top:0;inset-inline-end:20%;background:var(--bad);color:#fff;border-radius:99px;font-size:.62rem;font-weight:700;padding:0 6px;display:none}
+.alarm{position:sticky;top:calc(var(--hh,64px) + 6px);z-index:15;display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(251,90,107,.95);color:#fff;border-radius:14px;padding:10px 12px;margin-bottom:12px;font-weight:700;font-size:.82rem;line-height:1.7;animation:pulse 1s infinite;box-shadow:0 6px 24px rgba(251,90,107,.4)}
+@keyframes pulse{50%{box-shadow:0 0 22px rgba(251,90,107,.7)}}
+.alarm .btn{background:#fff;color:#b4182d;white-space:nowrap;padding:8px 12px}
+.card.alarming{border-color:var(--bad);box-shadow:0 0 22px color-mix(in srgb,var(--bad) 35%,transparent)}
+.lbl{flex:1;font-size:.75rem;color:var(--mut)}
+/* settings */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:6px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chip2{flex:none;background:var(--card);border:1px solid var(--bd);color:var(--tx);border-radius:99px;padding:7px 13px;font-family:inherit;font-size:.78rem;cursor:pointer}
+.chip2:hover{border-color:var(--acc)}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--bd)}
+.opt:last-child{border-bottom:0}
+.opt .tx{flex:1;min-width:0}.opt .tx b{display:block;font-size:.92rem;font-weight:600}.opt .tx small{color:var(--mut);font-size:.72rem;display:block;line-height:1.5}
+.rg{display:flex;align-items:center;gap:8px}.rv{font-size:.8rem;min-width:46px;text-align:end;color:var(--acc)}
+.sws{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:200px}
+.swc{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swc.a{border-color:var(--tx);box-shadow:0 0 0 2px var(--bg)}
+input[type=color]{width:30px;height:30px;border:0;padding:0;background:none;border-radius:50%;cursor:pointer}
+.setsec{margin-bottom:var(--gap);scroll-margin-top:calc(var(--hh,64px) + 10px)}
+.setsec h3{font-size:.95rem;color:var(--tx)}
+#report{position:fixed;left:-10000px;top:0;width:760px;background:#fff;color:#111;padding:24px;font-family:'Cairo',Arial,sans-serif}
 #report table td,#report table th{border:1px solid #ccc;padding:5px;font-size:12px}
 </style>
 </head>
 <body>
 <header>
   <button class="ibtn" id="menuBtn" aria-label="menu">☰</button>
-  <div class="ttl"><b>ROJ DART · لوحة المراقبة الذكية</b><small>تم التصميم والبرمجة بواسطة المهندس / محمد غنيم</small></div>
-  <button class="pill" id="connPill"><span class="dot" id="connDot"></span><span id="connTxt">غير متصل</span></button>
+  <div class="ttl"><div class="brandrow"><b id="brand">كريتڤ</b><span class="chip">Ghønim</span></div><small data-i18n="sig_short"></small></div>
+  <button class="ibtn" data-go="settings" aria-label="settings">⚙️</button>
+  <button class="pill" id="connPill"><span class="dot" id="connDot"></span><span id="connTxt"></span></button>
 </header>
 
 <div class="drawer" id="drawer"><div class="bg" id="drawerBg"></div>
 <nav>
-  <h2 style="margin-bottom:8px">⚙️ ROJ DART</h2>
-  <a data-go="home">🏠 الرئيسية</a><a data-go="yarn">🧵 حساس قطع الخيط</a><a data-go="speed">⚡ حساس السرعة</a>
-  <a data-go="dht">🌡️ الحرارة والرطوبة</a><a data-go="power">🔌 الطاقة والعزل</a>
-  <a id="navConn">📡 الاتصال بالمتحكم</a><a id="navPdf">📄 تصدير تقرير PDF</a><a id="navInstall" style="display:none">📲 تثبيت التطبيق</a>
-  <div class="sig">تم التصميم والبرمجة بواسطة<br><b>المهندس / محمد غنيم</b><br>Developed &amp; Engineered by<br><b>Mohamed Farid Ghonim</b></div>
+  <h2><span id="brand2">كريتڤ</span><span class="chip">Ghønim</span></h2>
+  <a data-go="home"><i>🏠</i><span data-i18n="home"></span></a>
+  <a data-go="yarn"><i>🧵</i><span data-i18n="p_yarn"></span></a>
+  <a data-go="speed"><i>⚡</i><span data-i18n="p_speed"></span></a>
+  <a data-go="dht"><i>🌡️</i><span data-i18n="p_dht"></span></a>
+  <a data-go="power"><i>🔌</i><span data-i18n="p_power"></span></a>
+  <a data-go="alerts"><i>🔔</i><span data-i18n="alerts"></span></a>
+  <a data-go="settings"><i>⚙️</i><span data-i18n="settings"></span></a>
+  <a id="navConn"><i>📡</i><span data-i18n="n_conn"></span></a>
+  <a id="navPdf"><i>📄</i><span data-i18n="b_pdf"></span></a>
+  <a id="navCsv"><i>📊</i><span data-i18n="b_csv"></span></a>
+  <a id="navInstall" style="display:none"><i>📲</i><span data-i18n="n_install"></span></a>
+  <div class="sig">تم التصميم والبرمجة بواسطة<br><b>المهندس / محمد غنيم</b><br>Developed &amp; Engineered by<br><b>Mohamed Ghonim</b></div>
 </nav></div>
 
 <main>
-<div class="alert" id="alertBar"></div>
+<div class="alarm" id="alarmBar"><div id="alarmList"></div><button class="btn" id="muteBtn"></button></div>
 
 <!-- HOME -->
 <section class="view show" id="v-home">
   <div class="grid">
-    <div class="card master"><div><h3>🔘 المفتاح الرئيسي (Master)</h3><div id="pwTxt" class="big" style="font-size:22px">قيد التشغيل</div><span class="badge b-ok" id="pwBadge">مؤكد: ON</span></div><div class="switch on" id="masterSw"></div></div>
+    <div class="card master" data-card="master"><div><h3><i>🔘</i><span data-i18n="master_t"></span></h3><div id="pwTxt" class="big" style="font-size:1.4rem"></div><span class="badge b-ok" id="pwBadge"></span></div><div class="switch on" id="masterSw"></div></div>
 
-    <div class="card"><h3>🖥️ شاشة LCD 16x2 (I2C)</h3>
+    <div class="card" data-card="lcd"><h3><i>🖥️</i><span data-i18n="lcd_t"></span></h3>
       <div class="lcd"><div id="lcd1"></div><div id="lcd2"></div></div>
-      <input type="text" id="lcdIn" maxlength="32" placeholder="اكتب رسالة (حتى 32 حرفاً - سطران × 16)">
-      <div class="row"><small id="lcdCnt" style="color:var(--mut)">0/32</small><button class="btn" id="lcdSend">إرسال إلى الشاشة</button></div></div>
+      <input type="text" id="lcdIn" maxlength="32" data-i18n-ph="lcd_ph">
+      <div class="row"><small id="lcdCnt" style="color:var(--mut)">0/32</small><button class="btn" id="lcdSend" data-i18n="lcd_send"></button></div>
+      <small style="color:var(--mut);display:block;margin-top:6px" data-i18n="lcd_hint"></small></div>
 
-    <div class="card"><h3>🌀 مرحل مروحة التبريد (5V Relay)</h3>
+    <div class="card" data-card="fan"><h3><i>🌀</i><span data-i18n="fan_t"></span></h3>
       <div class="row"><div class="fan" id="fanIcon"></div>
-      <div><div id="fanTxt" class="big" style="font-size:20px">متوقفة</div><small id="fanTemp" style="color:var(--mut)"></small></div>
+      <div><div id="fanTxt" class="big" style="font-size:1.25rem"></div><small id="fanTemp" style="color:var(--mut)"></small></div>
       <div class="switch" id="fanSw" style="width:74px"></div></div>
-      <div class="row" style="margin-top:12px"><div class="seg" id="fanSeg"><button data-m="auto" class="a">آلي</button><button data-m="manual">يدوي</button></div>
-      <label style="font-size:12px;color:var(--mut)">حد التشغيل °C <input type="number" id="thr" value="35" min="20" max="60" style="width:70px;display:inline-block"></label></div></div>
+      <div class="row" style="margin-top:12px"><div class="seg" id="fanSeg"><button data-m="auto" class="a" data-i18n="mode_auto"></button><button data-m="manual" data-i18n="mode_manual"></button></div>
+      <label class="lbl" style="display:flex;align-items:center;gap:6px;flex:none"><span data-i18n="thr_lbl"></span> <input class="num" type="number" id="thr" style="width:76px"><span class="tu"></span></label></div></div>
   </div>
 
-  <h3 style="margin:16px 4px 8px;color:var(--mut)">الحساسات — اضغط للتفاصيل</h3>
+  <h3 style="margin:16px 4px 8px;color:var(--mut)" data-i18n="sensors_h"></h3>
   <div class="grid">
-    <div class="card tap" data-go="yarn"><h3>🧵 حساس قطع الخيط البصري</h3><div class="row"><div class="big" id="hYarn">سليم</div><span class="badge b-ok" id="hYarnB">OK</span></div><small style="color:var(--mut)">مرات الانقطاع: <b id="hYarnC">0</b></small></div>
-    <div class="card tap" data-go="speed"><h3>⚡ حساس السرعة (Hall LM393)</h3><div class="big"><span id="hRpm">0</span><span class="unit">RPM</span></div><small style="color:var(--mut)">سحب الخيط: <b id="hPull">0</b> م/د</small></div>
-    <div class="card tap" data-go="dht"><h3>🌡️ DHT11 حرارة ورطوبة</h3><div class="big"><span id="hTemp">--</span><span class="unit">°C</span> <span style="font-size:20px"><span id="hHum">--</span>%</span></div><small style="color:var(--mut)">رطوبة نسبية</small></div>
-    <div class="card tap" data-go="power"><h3>🔌 الطاقة والعزل (L7805 / PC817)</h3><div class="big"><span id="hVout">5.00</span><span class="unit">V</span></div><span class="badge b-ok" id="hOpto">العزل سليم</span></div>
+    <div class="card tap" data-go="yarn" data-card="yarn"><h3><i>🧵</i><span data-i18n="yarn_c"></span></h3><div class="row"><div class="big" id="hYarn"></div><span class="badge b-ok" id="hYarnB"></span></div><small style="color:var(--mut)"><span data-i18n="breaks"></span>: <b id="hYarnC">0</b></small></div>
+    <div class="card tap" data-go="speed" data-card="speed"><h3><i>⚡</i><span data-i18n="speed_c"></span></h3><div class="big"><span id="hRpm">0</span><span class="unit">RPM</span></div><small style="color:var(--mut)"><span data-i18n="pull"></span>: <b id="hPull">0</b> <span data-i18n="mmin"></span></small></div>
+    <div class="card tap" data-go="dht" data-card="dht"><h3><i>🌡️</i><span data-i18n="dht_c"></span></h3><div class="big"><span id="hTemp">--</span><span class="unit tu"></span> <span style="font-size:1.2rem"><span id="hHum">--</span>%</span></div><small style="color:var(--mut)" data-i18n="rh"></small></div>
+    <div class="card tap" data-go="power" data-card="power"><h3><i>🔌</i><span data-i18n="power_c"></span></h3><div class="big"><span id="hVout">5.00</span><span class="unit">V</span></div><span class="badge b-ok" id="hOpto"></span></div>
+    <div class="card tap" data-go="alerts" data-card="alerts"><h3><i>🔔</i><span data-i18n="al_c"></span></h3><div class="big" id="hAlCnt">0</div><span class="badge b-ok" id="hAlB"></span></div>
   </div>
 </section>
 
 <!-- YARN -->
-<section class="view" id="v-yarn"><button class="btn ghost back" data-go="home">→ العودة للرئيسية</button>
+<section class="view" id="v-yarn"><button class="btn ghost back" data-go="home" data-i18n="back"></button>
   <div class="grid">
-    <div class="card"><h3>🧵 حالة الخيط لحظياً</h3><div class="big" id="yState">سليم</div><span class="badge b-ok" id="yBadge">متصل بالماكينة</span></div>
-    <div class="card"><h3>🔢 عداد الانقطاعات</h3><div class="big" id="yCount">0</div><div class="row" style="margin-top:8px"><button class="btn ghost" id="yReset">تصفير</button><button class="btn ghost" id="ySim">اختبار قطع</button></div></div>
+    <div class="card"><h3><i>🧵</i><span data-i18n="y_state"></span></h3><div class="big" id="yState"></div><span class="badge b-ok" id="yBadge"></span></div>
+    <div class="card"><h3><i>🔢</i><span data-i18n="y_count"></span></h3><div class="big" id="yCount">0</div><div class="row" style="margin-top:8px"><button class="btn ghost" id="yReset" data-i18n="reset"></button></div></div>
   </div>
-  <div class="card" style="margin-top:12px"><h3>🕒 سجل الانقطاعات (Timestamp Log)</h3><div class="scroll"><table><thead><tr><th>#</th><th>الوقت</th><th>RPM</th></tr></thead><tbody id="yLog"></tbody></table></div></div>
+  <div class="card" style="margin-top:12px"><h3><i>🕒</i><span data-i18n="y_log"></span></h3><div class="scroll"><table><thead><tr><th>#</th><th data-i18n="time"></th><th>RPM</th></tr></thead><tbody id="yLog"></tbody></table></div></div>
 </section>
 
 <!-- SPEED -->
-<section class="view" id="v-speed"><button class="btn ghost back" data-go="home">→ العودة للرئيسية</button>
+<section class="view" id="v-speed"><button class="btn ghost back" data-go="home" data-i18n="back"></button>
   <div class="grid">
-    <div class="card"><h3>⏱️ عداد السرعة (Gauge)</h3><canvas id="gauge" width="300" height="180" style="display:block;margin:auto"></canvas></div>
-    <div class="card"><h3>📏 القياسات</h3><div class="big"><span id="sRpm">0</span><span class="unit">RPM</span></div><div class="big" style="margin-top:6px"><span id="sPull">0</span><span class="unit">م/دقيقة سحب الخيط</span></div><small style="color:var(--mut)">قطر بكرة السحب: 40 مم (قابل للتعديل في الكود)</small></div>
-  </div>
-  <div class="card" style="margin-top:12px"><h3>📈 رسم بياني حي للسرعة</h3><div class="chartbox"><canvas id="cSpeed"></canvas></div></div>
-</section>
-
-<!-- DHT -->
-<section class="view" id="v-dht"><button class="btn ghost back" data-go="home">→ العودة للرئيسية</button>
-  <div class="grid">
-    <div class="card"><h3>🌡️ درجة الحرارة</h3><div class="big"><span id="dTemp">--</span><span class="unit">°C</span></div><span class="badge b-ok" id="dBadge">طبيعية</span></div>
-    <div class="card"><h3>💧 الرطوبة</h3><div class="big"><span id="dHum">--</span><span class="unit">%</span></div><small style="color:var(--mut)">المروحة: <b id="dFan">متوقفة</b> (تلقائي عند ≥ <b id="dThr">35</b>°C)</small></div>
-  </div>
-  <div class="card" style="margin-top:12px"><h3>📊 السجل التاريخي</h3><div class="chartbox"><canvas id="cDht"></canvas></div></div>
-</section>
-
-<!-- POWER -->
-<section class="view" id="v-power"><button class="btn ghost back" data-go="home">→ العودة للرئيسية</button>
-  <div class="grid">
-    <div class="card"><h3>🔋 دخل التغذية (9–12V)</h3><div class="big"><span id="pVin">--</span><span class="unit">V</span></div></div>
-    <div class="card"><h3>🎯 خرج L7805 (5V DC)</h3><div class="big"><span id="pVout">--</span><span class="unit">V</span></div><span class="badge b-ok" id="pStab">مستقر</span><div style="margin-top:10px;height:10px;background:#1b2542;border-radius:9px;overflow:hidden"><div id="pBar" style="height:100%;width:100%;background:var(--ok)"></div></div></div>
-    <div class="card"><h3>🛡️ العزل الضوئي PC817</h3><div class="row"><div id="pOptoLed" style="width:22px;height:22px;border-radius:50%;background:var(--ok);box-shadow:0 0 14px var(--ok)"></div><b id="pOpto">العزل سليم — ESP32 محمي من تيار الموتور</b></div><small style="color:var(--mut);display:block;margin-top:8px">مكثفات الفلترة: 10µF + 0.1µF على خرج المنظم.</small></div>
-  </div>
-  <div class="card" style="margin-top:12px"><h3>📈 استقرار الجهد</h3><div class="chartbox"><canvas id="cVolt"></canvas></div></div>
-</section>
-
-<footer>© ROJ DART Smart Dashboard — تم التصميم والبرمجة بواسطة المهندس / <b>محمد غنيم</b><br>Developed &amp; Engineered by <b>Mohamed Farid Ghonim</b></footer>
-</main>
-
-<div class="tabbar">
-  <a class="a" data-go="home"><span>🏠</span>الرئيسية</a><a data-go="yarn"><span>🧵</span>الخيط</a><a data-go="speed"><span>⚡</span>السرعة</a><a data-go="dht"><span>🌡️</span>الحرارة</a><a data-go="power"><span>🔌</span>الطاقة</a>
-</div>
-
-<div class="modal" id="connModal"><div class="card"><h3>📡 الاتصال بالمتحكم ESP32</h3>
-  <input type="text" id="ipIn" placeholder="عنوان IP مثال: 192.168.4.1" dir="ltr">
-  <button class="btn" id="cWs">Wi-Fi · WebSocket</button>
-  <button class="btn" id="cHttp">Wi-Fi · HTTP</button>
-  <button class="btn" id="cBle">Bluetooth (BLE)</button>
-  <button class="btn ghost" id="cDemo">وضع المحاكاة (Demo)</button>
-  <button class="btn red" id="cOff">قطع الاتصال</button>
-  <button class="btn ghost" id="cClose">إغلاق</button></div></div>
-<div class="toast" id="toast"></div>
-<div id="report"></div>
-
-<script>
-/* ============================================================================
-   ROJ DART Smart Dashboard — Application Logic
-   تم التصميم والبرمجة بواسطة المهندس / محمد غنيم
-   Developed & Engineered by Mohamed Ghonim
-   ============================================================================ */
-const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const ROLLER_D = 0.04;            // pull roller diameter (m)
-const MAXPTS = 60;
-const S = { power:true, yarn:1, yarnCount:0, yarnLog:[], rpm:0, pull:0, temp:28, hum:50, fan:false, fanMode:'auto',
-  thr:35, vin:11.8, vout:5.0, opto:1, mode:'none', lcd:['ROJ DART READY','Eng.M.F.Ghonim'], alerts:[], log:[] };
-let ws=null, httpTimer=null, bleChar=null, simTimer=null, audioCtx=null, lastLogT=0;
-
-/* ---------- helpers ---------- */
-const now = () => new Date().toLocaleTimeString('ar-EG',{hour12:false});
-const nowFull = () => new Date().toLocaleString('ar-EG');
-function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
-function beep(){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
-  [0,.25,.5].forEach(d=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='square';o.frequency.value=880;g.gain.value=.08;o.connect(g);g.connect(audioCtx.destination);o.start(audioCtx.currentTime+d);o.stop(audioCtx.currentTime+d+.15)});
-  navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}}
-function addAlert(msg,sound){S.alerts.unshift({t:nowFull(),msg});S.alerts=S.alerts.slice(0,100);
-  const b=$('#alertBar');b.textContent='⚠️ '+msg;b.style.display='block';clearTimeout(addAlert.t);addAlert.t=setTimeout(()=>b.style.display='none',8000);if(sound)beep()}
-
-/* ---------- navigation ---------- */
-function go(v){$$('.view').forEach(e=>e.classList.remove('show'));$('#v-'+v).classList.add('show');
-  $$('.tabbar a').forEach(a=>a.classList.toggle('a',a.dataset.go===v));$('#drawer').classList.remove('open');scrollTo({top:0,behavior:'smooth'});
-  setTimeout(()=>Object.values(charts).forEach(c=>c.resize()),50)}
-document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)go(g.dataset.go)});
-$('#menuBtn').onclick=()=>$('#drawer').classList.add('open');$('#drawerBg').onclick=()=>$('#drawer').classList.remove('open');
-
-/* ---------- charts ---------- */
-const labels=Array(MAXPTS).fill('');
-function mk(id,sets,opts={}){return new Chart($(id),{type:'line',data:{labels:[...labels],datasets:sets.map(s=>({data:Array(MAXPTS).fill(null),borderColor:s.c,backgroundColor:s.c+'22',fill:s.fill??false,tension:.35,pointRadius:0,borderWidth:2,label:s.l,yAxisID:s.y||'y'}))},
-  options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{labels:{color:'#8fa0c2'}}},scales:{x:{display:false},y:{ticks:{color:'#8fa0c2'},grid:{color:'#ffffff10'},...(opts.y||{})},...(opts.y1?{y1:{position:'right',ticks:{color:'#8fa0c2'},grid:{display:false},...opts.y1}}:{})}}})}
-const charts={
-  speed:mk('#cSpeed',[{l:'RPM',c:'#38bdf8',fill:true}]),
-  dht:mk('#cDht',[{l:'°C',c:'#fb923c'},{l:'% رطوبة',c:'#22d3ee',y:'y1'}],{y1:{}}),
-  volt:mk('#cVolt',[{l:'V خرج 5V',c:'#22d3a0'}],{y:{min:4.5,max:5.5}})
-};
-function push(ch,vals){ch.data.datasets.forEach((d,i)=>{d.data.push(vals[i]);d.data.shift()});ch.data.labels.push(now());ch.data.labels.shift();ch.update('none')}
-
-/* ---------- gauge ---------- */
-function drawGauge(v,max=3000){const c=$('#gauge'),x=c.getContext('2d'),w=c.width,h=c.height;x.clearRect(0,0,w,h);
-  const cx=w/2,cy=h-20,r=110,a0=Math.PI,p=Math.min(v/max,1);
-  x.lineWidth=18;x.lineCap='round';x.strokeStyle='#1b2542';x.beginPath();x.arc(cx,cy,r,a0,2*Math.PI);x.stroke();
-  const g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,'#22d3a0');g.addColorStop(.6,'#fbbf24');g.addColorStop(1,'#fb5a6b');
-  x.strokeStyle=g;x.beginPath();x.arc(cx,cy,r,a0,a0+Math.PI*p);x.stroke();
-  const a=a0+Math.PI*p;x.strokeStyle='#fff';x.lineWidth=4;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-26),cy+Math.sin(a)*(r-26));x.stroke();
-  x.fillStyle='#fff';x.font='bold 22px Cairo';x.textAlign='center';x.fillText(Math.round(v),cx,cy-30);x.fillStyle='#8fa0c2';x.font='12px Cairo';x.fillText('RPM',cx,cy-12)}
-
-/* ---------- ingest data (real or simulated) ---------- */
-function apply(d){
-  if('power'in d)S.power=!!d.power;
-  if('yarn'in d){const prev=S.yarn;S.yarn=d.yarn?1:0;if(prev&&!S.yarn){S.yarnCount=d.yarnCount??S.yarnCount+1;S.yarnLog.unshift({n:S.yarnCount,t:nowFull(),rpm:Math.round(S.rpm)});addAlert('تم قطع الخيط! (انقطاع رقم '+S.yarnCount+')',true)}}
-  if('yarnCount'in d&&d.yarn!==0)S.yarnCount=d.yarnCount;
-  ['rpm','temp','hum','vin','vout'].forEach(k=>{if(k in d)S[k]=+d[k]});
-  if('fan'in d)S.fan=!!d.fan;if('fanMode'in d)S.fanMode=d.fanMode;if('opto'in d){const p=S.opto;S.opto=d.opto?1:0;if(p&&!S.opto)addAlert('تحذير: فقدان العزل الضوئي PC817',true)}
-  S.pull=S.rpm*Math.PI*ROLLER_D;
-  if(S.temp>=S.thr+5&&!apply.hot){apply.hot=1;addAlert('ارتفاع حرارة شديد: '+S.temp.toFixed(1)+'°C',true)}if(S.temp<S.thr)apply.hot=0;
-  render();const t=Date.now();
-  push(charts.speed,[S.rpm]);push(charts.dht,[S.temp,S.hum]);push(charts.volt,[S.vout]);
-  if(t-lastLogT>5000){lastLogT=t;S.log.unshift({t:nowFull(),rpm:Math.round(S.rpm),temp:S.temp.toFixed(1),hum:Math.round(S.hum),vout:S.vout.toFixed(2),yarn:S.yarn?'سليم':'مقطوع'});S.log=S.log.slice(0,300)}
-}
-
-/* ---------- render ---------- */
-function setB(el,ok,txt,warn){el.className='badge '+(ok?'b-ok':warn?'b-warn':'b-bad');el.textContent=txt}
-function render(){
-  $('#masterSw').classList.toggle('on',S.power);$('#pwTxt').textContent=S.power?'قيد التشغيل':'متوقف';setB($('#pwBadge'),S.power,'مؤكد: '+(S.power?'ON':'OFF'));
-  $('#hYarn').textContent=S.yarn?'سليم':'مقطوع!';setB($('#hYarnB'),S.yarn,S.yarn?'OK':'BREAK');$('#hYarnC').textContent=S.yarnCount;
-  $('#yState').textContent=S.yarn?'سليم':'مقطوع!';$('#yState').style.color=S.yarn?'':'var(--bad)';setB($('#yBadge'),S.yarn,S.yarn?'الخيط يمر طبيعياً':'⚠ الخيط مقطوع');$('#yCount').textContent=S.yarnCount;
-  $('#yLog').innerHTML=S.yarnLog.map(l=>`<tr><td>${l.n}</td><td>${l.t}</td><td>${l.rpm}</td></tr>`).join('')||'<tr><td colspan=3>لا توجد انقطاعات</td></tr>';
-  const rp=Math.round(S.rpm),pl=S.pull.toFixed(1);['hRpm','sRpm'].forEach(i=>$('#'+i).textContent=rp);['hPull','sPull'].forEach(i=>$('#'+i).textContent=pl);drawGauge(S.rpm);
-  const T=S.temp.toFixed(1),H=Math.round(S.hum);['hTemp','dTemp'].forEach(i=>$('#'+i).textContent=T);['hHum','dHum'].forEach(i=>$('#'+i).textContent=H);
-  const hot=S.temp>=S.thr;setB($('#dBadge'),!hot,hot?'مرتفعة':'طبيعية');
-  $('#fanSw').classList.toggle('on',S.fan);$('#fanIcon').classList.toggle('spin',S.fan);$('#fanTxt').textContent=S.fan?'تعمل (دوران)':'متوقفة';$('#fanTemp').textContent='الحرارة '+T+'°C';
-  $('#dFan').textContent=S.fan?'تعمل':'متوقفة';$('#dThr').textContent=S.thr;
-  $$('#fanSeg button').forEach(b=>b.classList.toggle('a',b.dataset.m===S.fanMode));
-  $('#hVout').textContent=S.vout.toFixed(2);$('#pVout').textContent=S.vout.toFixed(2);$('#pVin').textContent=S.vin.toFixed(1);
-  const dev=Math.abs(S.vout-5),st=dev<.1;setB($('#pStab'),st,st?'مستقر':'انحراف '+dev.toFixed(2)+'V',dev<.25);$('#pBar').style.width=Math.max(0,100-dev*200)+'%';$('#pBar').style.background=st?'var(--ok)':'var(--warn)';
-  setB($('#hOpto'),S.opto,S.opto?'العزل سليم':'العزل معطل');$('#pOpto').textContent=S.opto?'العزل سليم — ESP32 محمي من تيار الموتور':'تحذير: العزل غير فعال!';
-  $('#pOptoLed').style.background=S.opto?'var(--ok)':'var(--bad)';$('#pOptoLed').style.boxShadow='0 0 14px '+(S.opto?'var(--ok)':'var(--bad)');
-  $('#lcd1').textContent=S.lcd[0].padEnd(16).slice(0,16);$('#lcd2').textContent=S.lcd[1].padEnd(16).slice(0,16);
-}
-
-/* ---------- commands (to ESP32) ---------- */
-function send(obj){const s=JSON.stringify(obj);
-  if(S.mode==='ws'&&ws&&ws.readyState===1)ws.send(s);
-  else if(S.mode==='http')fetch($('#ipIn').value.trim().replace(/^(?!http)/,'http://')+'/cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:s}).catch(()=>toast('تعذر الإرسال عبر HTTP'));
-  else if(S.mode==='ble'&&bleChar){const b=new TextEncoder().encode(s+'\n');(async()=>{for(let i=0;i<b.length;i+=20)await bleChar.writeValue(b.slice(i,i+20))})().catch(()=>toast('تعذر الإرسال عبر Bluetooth'))}}
-$('#masterSw').onclick=()=>{S.power=!S.power;if(!S.power)S.rpm=S.rpm;send({cmd:'power',value:S.power?1:0});render();toast(S.power?'تم التشغيل':'تم الإيقاف')};
-$('#lcdIn').oninput=e=>$('#lcdCnt').textContent=e.target.value.length+'/32';
-$('#lcdSend').onclick=()=>{const t=$('#lcdIn').value.slice(0,32);S.lcd=[t.slice(0,16),t.slice(16,32)];send({cmd:'lcd',line1:S.lcd[0],line2:S.lcd[1]});render();toast('تم إرسال الرسالة إلى الشاشة')};
-$('#fanSw').onclick=()=>{S.fanMode='manual';S.fan=!S.fan;send({cmd:'fan',mode:'manual',value:S.fan?1:0});render()};
-$$('#fanSeg button').forEach(b=>b.onclick=()=>{S.fanMode=b.dataset.m;send({cmd:'fan',mode:S.fanMode,threshold:S.thr});render()});
-$('#thr').onchange=e=>{S.thr=+e.target.value||35;send({cmd:'fan',mode:S.fanMode,threshold:S.thr});render()};
-$('#yReset').onclick=()=>{S.yarnCount=0;S.yarnLog=[];render()};
-$('#ySim').onclick=()=>{apply({yarn:0});setTimeout(()=>apply({yarn:1}),4000)};
-
-/* ---------- connectivity ---------- */
-function setConn(m){S.mode=m;const d=$('#connDot');d.className='dot '+(m==='demo'?'demo':m==='none'?'':'on');
-  $('#connTxt').textContent={none:'غير متصل',demo:'محاكاة',ws:'متصل · WiFi',http:'متصل · HTTP',ble:'متصل · BT'}[m];
-  clearInterval(simTimer);if(m==='demo')simTimer=setInterval(simTick,1000)}
-function disconnect(){try{ws&&ws.close()}catch(e){}ws=null;clearInterval(httpTimer);try{bleChar&&bleChar.service.device.gatt.disconnect()}catch(e){}bleChar=null;setConn('none')}
-const ipv=()=>$('#ipIn').value.trim();
-$('#cWs').onclick=()=>{if(!ipv())return toast('أدخل عنوان IP');disconnect();try{ws=new WebSocket('ws://'+ipv()+':81/');
-  ws.onopen=()=>{setConn('ws');toast('تم الاتصال');$('#connModal').classList.remove('open')};ws.onmessage=e=>{try{apply(JSON.parse(e.data))}catch(x){}};
-  ws.onclose=()=>{if(S.mode==='ws')setConn('none')};ws.onerror=()=>toast('فشل الاتصال (تأكد من IP والشبكة)')}catch(e){toast('عنوان غير صالح')}};
-$('#cHttp').onclick=()=>{if(!ipv())return toast('أدخل عنوان IP');disconnect();const base=ipv().replace(/^(?!http)/,'http://');setConn('http');$('#connModal').classList.remove('open');
-  httpTimer=setInterval(()=>fetch(base+'/status').then(r=>r.json()).then(apply).catch(()=>{$('#connTxt').textContent='لا استجابة'}),1000)};
-$('#cBle').onclick=async()=>{if(!navigator.bluetooth)return toast('المتصفح لا يدعم Web Bluetooth (استخدم Chrome/Android)');
-  try{const dev=await navigator.bluetooth.requestDevice({filters:[{services:['6e400001-b5a3-f393-e0a9-e50e24dcca9e']}]});disconnect();
-    const srv=await dev.gatt.connect(),svc=await srv.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-    bleChar=await svc.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');const tx=await svc.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
-    let buf='';await tx.startNotifications();tx.addEventListener('characteristicvaluechanged',e=>{buf+=new TextDecoder().decode(e.target.value);let i;while((i=buf.indexOf('\n'))>=0){try{apply(JSON.parse(buf.slice(0,i)))}catch(x){}buf=buf.slice(i+1)}});
-    dev.addEventListener('gattserverdisconnected',()=>{if(S.mode==='ble')setConn('none')});setConn('ble');$('#connModal').classList.remove('open');toast('تم الاتصال عبر Bluetooth')}catch(e){toast('تم إلغاء/فشل اتصال Bluetooth')}};
-$('#cDemo').onclick=()=>{disconnect();setConn('demo');$('#connModal').classList.remove('open');toast('وضع المحاكاة يعمل')};
-$('#cOff').onclick=()=>{disconnect();$('#connModal').classList.remove('open')};
-$('#cClose').onclick=()=>$('#connModal').classList.remove('open');
-$('#connPill').onclick=$('#navConn').onclick=()=>{$('#drawer').classList.remove('open');$('#connModal').classList.add('open')};
-
-/* ---------- simulation (demo mode) ---------- */
-let breakUntil=0,tt=0;
-function simTick(){tt++;const t=Date.now();let rpm=S.rpm;
-  const target=S.power&&S.yarn?1200+Math.sin(tt/8)*150+(Math.random()-.5)*40:0;rpm+=(target-rpm)*.35;
-  let yarn=S.yarn;
-  if(S.power&&yarn&&Math.random()<.015){yarn=0;breakUntil=t+6000}
-  if(!yarn&&t>breakUntil&&!$('#ySim').dataset.h)yarn=1;
-  let fan=S.fan;const base=27+(rpm/1200)*15-(fan?9:0);let temp=S.temp+(base-S.temp)*.08+(Math.random()-.5)*.2;
-  if(S.fanMode==='auto')fan=S.fan?temp>S.thr-2:temp>=S.thr;
-  const hum=Math.max(20,Math.min(85,S.hum+(70-temp*1.2-S.hum)*.1+(Math.random()-.5)));
-  apply({yarn,rpm:Math.max(0,rpm),temp,hum,fan,vin:11.8+(Math.random()-.5)*.3,vout:5.0+(Math.random()-.5)*.06,opto:Math.random()<.003?0:1,power:S.power});
-  if(!S.opto&&Math.random()<.5)apply({opto:1})}
-
-/* ---------- PDF report ---------- */
-function exportPDF(){
-  const rows=S.log.slice(0,60).map(l=>`<tr><td>${l.t}</td><td>${l.rpm}</td><td>${l.temp}</td><td>${l.hum}</td><td>${l.vout}</td><td>${l.yarn}</td></tr>`).join('')||'<tr><td colspan=6>لا توجد قراءات</td></tr>';
-  const al=S.alerts.map(a=>`<tr><td>${a.t}</td><td>${a.msg}</td></tr>`).join('')||'<tr><td colspan=2>لا توجد تنبيهات</td></tr>';
-  $('#report').innerHTML=`<h2 style="text-align:center">تقرير لوحة ROJ DART الصناعية</h2><p style="text-align:center">${nowFull()} — وضع الاتصال: ${$('#connTxt').textContent}</p><hr>
-  <p>حالة النظام: <b>${S.power?'يعمل':'متوقف'}</b> | الخيط: <b>${S.yarn?'سليم':'مقطوع'}</b> | عدد الانقطاعات: <b>${S.yarnCount}</b> | RPM: <b>${Math.round(S.rpm)}</b> | الحرارة: <b>${S.temp.toFixed(1)}°C</b> | الرطوبة: <b>${Math.round(S.hum)}%</b> | الجهد: <b>${S.vout.toFixed(2)}V</b></p>
-  <h3>سجل القراءات</h3><table><tr><th>الوقت</th><th>RPM</th><th>°C</th><th>رطوبة%</th><th>V</th><th>الخيط</th></tr>${rows}</table>
-  <h3>سجل التنبيهات</h3><table><tr><th>الوقت</th><th>التنبيه</th></tr>${al}</table>
-  <h3>سجل قطع الخيط</h3><table><tr><th>#</th><th>الوقت</th><th>RPM</th></tr>${S.yarnLog.map(l=>`<tr><td>${l.n}</td><td>${l.t}</td><td>${l.rpm}</td></tr>`).join('')||'<tr><td colspan=3>—</td></tr>'}</table>
-  <hr><p style="text-align:center;margin-top:18px"><b>تم التصميم والبرمجة بواسطة المهندس / محمد غنيم</b><br>Developed &amp; Engineered by Mohamed Farid Ghonim</p>`;
-  toast('جاري إنشاء PDF...');
-  html2pdf().set({margin:8,filename:'ROJ-DART-Report-'+Date.now()+'.pdf',image:{type:'jpeg',quality:.95},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'}}).from($('#report')).save().then(()=>toast('تم حفظ التقرير'));
-}
-$('#navPdf').onclick=()=>{$('#drawer').classList.remove('open');exportPDF()};
-
-/* ---------- PWA: manifest (generated), service worker, install ---------- */
-(function(){
-  if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
-  let dp=null;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('#navInstall').style.display='block'});
-  $('#navInstall').onclick=async()=>{if(!dp)return;dp.prompt();await dp.userChoice;dp=null;$('#navInstall').style.display='none'};
-})();
-
-/* ---------- boot ---------- */
-render();drawGauge(0);setConn('demo');
-</script>
-</body>
-</html>
+    <div class="card"><h3><i>⏱️</i><span data-i18n="gauge_t"></span></h3><canvas id="gauge" width="300" height="180" style="display:block;margin:auto"></ca
